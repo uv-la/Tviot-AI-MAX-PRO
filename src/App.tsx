@@ -369,6 +369,31 @@ function PublicClaimUpdates({ claimId }: { claimId: string }) {
                         party === 'garage' ? claimInfo.requested_docs_garage :
                         claimInfo.requested_docs;
 
+  const calculateRemainingTime = () => {
+    if (!claimInfo?.claim_date || !claimInfo?.estimated_processing_days || claimInfo?.estimated_processing_days === 'לא ידוע עדיין') {
+      return null;
+    }
+
+    const eventDate = new Date(claimInfo.claim_date);
+    const totalDays = parseInt(claimInfo.estimated_processing_days as string);
+    
+    if (isNaN(totalDays)) return null;
+
+    const targetDate = new Date(eventDate);
+    targetDate.setDate(targetDate.getDate() + totalDays);
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    targetDate.setHours(0, 0, 0, 0);
+
+    const diffTime = targetDate.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    return diffDays;
+  };
+
+  const remainingDays = calculateRemainingTime();
+
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-8" dir="rtl">
       <div className="max-w-2xl mx-auto space-y-6">
@@ -402,11 +427,21 @@ function PublicClaimUpdates({ claimId }: { claimId: string }) {
                 <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">דגם</p>
                 <p className="text-slate-700">{claimInfo.car_model}</p>
               </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">סטטוס נוכחי</p>
-                <span className="inline-block px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-full text-[10px] font-bold border border-indigo-100">
-                  {claimInfo.status}
-                </span>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">סטטוס נוכחי</p>
+                  <span className="inline-block px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-full text-[10px] font-bold border border-indigo-100">
+                    {claimInfo.status}
+                  </span>
+                </div>
+                {remainingDays !== null && (
+                  <div className="text-left bg-emerald-50 p-2 rounded-xl border border-emerald-100">
+                    <p className="text-[9px] uppercase tracking-wider text-emerald-600 font-bold">זמן טיפול משוער נותר</p>
+                    <p className="text-xl font-black text-emerald-700 leading-none">
+                      {remainingDays > 0 ? `${remainingDays} ימים` : remainingDays === 0 ? 'היום' : 'בפיגור'}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -423,115 +458,66 @@ function PublicClaimUpdates({ claimId }: { claimId: string }) {
             </h2>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6" dir="rtl">
-            {/* Right Column: Not Required */}
-            <div className="space-y-3">
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider px-1">לא נדרש</h3>
-              <div className="space-y-2">
-                {Object.keys(DOC_LABELS).filter(field => !claimInfo[field] && !requestedDocs?.includes(field)).map((field) => (
-                  <div key={field} className="p-2 bg-slate-50/50 border border-slate-100 rounded-xl opacity-60">
-                    <p className="text-[11px] font-medium text-slate-500">{DOC_LABELS[field]}</p>
+          <div className="space-y-3">
+            {Object.keys(DOC_LABELS).filter(field => !claimInfo[field] && requestedDocs?.includes(field)).map((field) => {
+              const isClaimForm = field === 'claim_form_path';
+              let jotFormLink = '';
+              if (isClaimForm && claimInfo.insurance_company) {
+                const company = Object.keys(JOTFORM_LINKS).find(name => claimInfo.insurance_company.includes(name));
+                if (company) jotFormLink = JOTFORM_LINKS[company];
+              }
+
+              return (
+                <div key={field} className="p-4 bg-amber-50 border border-amber-100 rounded-2xl shadow-sm">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center text-amber-600">
+                        <Upload size={20} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-amber-900">{DOC_LABELS[field]}</p>
+                        <p className="text-[10px] text-amber-600">נדרש להעלאה</p>
+                      </div>
+                    </div>
+                    
+                    {isClaimForm && jotFormLink ? (
+                      <a 
+                        href={jotFormLink} 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all shadow-sm font-bold text-xs"
+                      >
+                        <ExternalLink size={14} />
+                        מילוי טופס דיגיטלי
+                      </a>
+                    ) : (
+                      <label className={`flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-xl hover:bg-amber-700 transition-all cursor-pointer shadow-sm font-bold text-xs ${uploadingField === field ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                        <Upload size={14} />
+                        {uploadingField === field ? 'מעלה...' : 'העלאת קובץ'}
+                        <input 
+                          type="file" 
+                          className="hidden" 
+                          multiple={['appraiser_report_path', 'appraiser_invoice_path', 'appraiser_photos_path', 'garage_invoice_path'].includes(field)}
+                          disabled={uploadingField === field}
+                          onChange={(e) => handlePublicUpload(e, field)} 
+                          accept="image/*,application/pdf"
+                        />
+                      </label>
+                    )}
                   </div>
-                ))}
+                </div>
+              );
+            })}
+            
+            {Object.keys(DOC_LABELS).filter(field => !claimInfo[field] && requestedDocs?.includes(field)).length === 0 && (
+              <div className="text-center py-12 bg-emerald-50 rounded-2xl border border-dashed border-emerald-200">
+                <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 mx-auto mb-4">
+                  <CheckCircle2 size={32} />
+                </div>
+                <h3 className="text-lg font-bold text-emerald-900">כל המסמכים התקבלו!</h3>
+                <p className="text-sm text-emerald-700">תודה רבה, אין מסמכים נוספים שנדרשים להעלאה כרגע.</p>
               </div>
-            </div>
-
-            {/* Middle Column: Required but not uploaded */}
-            <div className="space-y-3">
-              <h3 className="text-xs font-bold text-amber-500 uppercase tracking-wider px-1">נדרש - טרם עלה</h3>
-              <div className="space-y-2">
-                {Object.keys(DOC_LABELS).filter(field => !claimInfo[field] && requestedDocs?.includes(field)).map((field) => {
-                  const isClaimForm = field === 'claim_form_path';
-                  let jotFormLink = '';
-                  if (isClaimForm && claimInfo.insurance_company) {
-                    const company = Object.keys(JOTFORM_LINKS).find(name => claimInfo.insurance_company.includes(name));
-                    if (company) jotFormLink = JOTFORM_LINKS[company];
-                  }
-
-                  return (
-                    <div key={field} className="p-3 bg-amber-50 border border-amber-100 rounded-xl space-y-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-xs font-bold text-amber-900">{DOC_LABELS[field]}</p>
-                        {isClaimForm && jotFormLink ? (
-                          <a 
-                            href={jotFormLink} 
-                            target="_blank" 
-                            rel="noreferrer"
-                            className="p-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
-                          >
-                            <ExternalLink size={12} />
-                          </a>
-                        ) : (
-                          <label className={`p-1.5 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors cursor-pointer ${uploadingField === field ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                            <Upload size={12} />
-                            <input 
-                              type="file" 
-                              className="hidden" 
-                              multiple={['appraiser_report_path', 'appraiser_invoice_path', 'appraiser_photos_path', 'garage_invoice_path'].includes(field)}
-                              disabled={uploadingField === field}
-                              onChange={(e) => handlePublicUpload(e, field)} 
-                              accept="image/*,application/pdf"
-                            />
-                          </label>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-                {Object.keys(DOC_LABELS).filter(field => !claimInfo[field] && requestedDocs?.includes(field)).length === 0 && (
-                  <p className="text-[10px] text-slate-400 italic px-1">אין מסמכים חסרים</p>
-                )}
-              </div>
-            </div>
-
-            {/* Left Column: Uploaded */}
-            <div className="space-y-3">
-              <h3 className="text-xs font-bold text-emerald-600 uppercase tracking-wider px-1">הועלה</h3>
-              <div className="space-y-2">
-                {Object.keys(DOC_LABELS).filter(field => claimInfo[field]).map((field) => {
-                  const path = claimInfo[field];
-                  return (
-                    <div key={field} className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 bg-emerald-200 rounded flex items-center justify-center text-emerald-700">
-                            <Check size={14} strokeWidth={3} />
-                          </div>
-                          <p className="text-xs font-bold text-emerald-900">{DOC_LABELS[field]}</p>
-                        </div>
-                        <label className={`p-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors cursor-pointer ${uploadingField === field ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                          <Upload size={12} />
-                          <input 
-                            type="file" 
-                            className="hidden" 
-                            multiple={['appraiser_report_path', 'appraiser_invoice_path', 'appraiser_photos_path', 'garage_invoice_path'].includes(field)}
-                            disabled={uploadingField === field}
-                            onChange={(e) => handlePublicUpload(e, field)} 
-                            accept="image/*,application/pdf"
-                          />
-                        </label>
-                      </div>
-                      
-                      <div className="flex flex-wrap gap-1.5">
-                        {(() => {
-                          const paths = Array.isArray(path) ? path : [path];
-                          return paths.map((p, idx) => (
-                            <button 
-                              key={idx}
-                              onClick={() => window.open(p, '_blank')}
-                              className="px-2 py-1 bg-white border border-emerald-200 text-emerald-700 rounded-lg text-[10px] font-bold hover:bg-emerald-100 transition-colors flex items-center gap-1"
-                            >
-                              <Search size={10} />
-                              {paths.length > 1 ? `קובץ ${idx + 1}` : 'צפייה'}
-                            </button>
-                          ));
-                        })()}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+            )}
           </div>
         </div>
 
