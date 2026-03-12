@@ -1793,7 +1793,9 @@ ${statusLink}
       console.error('Error logging WhatsApp action:', error);
     }
     
-    setIsWhatsAppModalOpen(false);
+    // Keep the modal open so the user can see it was successful, or close it if preferred.
+    // The user requested not to close the "page", which might include this modal.
+    // However, usually we close it. Let's try keeping it open but showing success.
     window.open(whatsappUrl, '_blank');
   };
 
@@ -2152,7 +2154,7 @@ ${statusLink}
     });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent, shouldClose = true) => {
     e.preventDefault();
     
     if (formData.customer_email && !isValidEmail(formData.customer_email)) {
@@ -2174,10 +2176,12 @@ ${statusLink}
 
       if (response.ok) {
         fetchClaims();
-        // Force close without dirty check
-        setIsModalOpen(false);
-        setEditingClaim(null);
-        setInitialFormData(null);
+        if (shouldClose) {
+          // Force close without dirty check
+          setIsModalOpen(false);
+          setEditingClaim(null);
+          setInitialFormData(null);
+        }
         showToast(editingClaim ? 'התביעה עודכנה בהצלחה' : 'התביעה נשמרה בהצלחה');
       } else if (response.status === 409) {
         const errorData = await response.json();
@@ -2553,7 +2557,7 @@ ${shortPublicUrl}
     const saveAndOpen = async () => {
       try {
         const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
-        await handleSubmit(fakeEvent);
+        await handleSubmit(fakeEvent, false); // Pass false to keep the main modal open
         
         if (type === 'whatsapp') {
           setWhatsAppFormData({
