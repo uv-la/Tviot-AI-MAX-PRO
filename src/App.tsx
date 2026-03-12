@@ -297,6 +297,10 @@ function PublicClaimUpdates({ claimId }: { claimId: string }) {
 
   useEffect(() => {
     fetchData();
+    const interval = setInterval(() => {
+      fetchData();
+    }, 5000); // Poll every 5 seconds for the customer
+    return () => clearInterval(interval);
   }, [claimId]);
 
   const handlePublicUpload = async (e: React.ChangeEvent<HTMLInputElement>, field: string) => {
@@ -653,6 +657,16 @@ export default function App() {
   });
 
   useEffect(() => {
+    if (currentUser) {
+      fetchClaims();
+      const interval = setInterval(() => {
+        fetchClaims();
+      }, 10000); // Poll every 10 seconds
+      return () => clearInterval(interval);
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
     const path = window.location.pathname;
     if (path.startsWith('/q/')) {
       const id = path.split('/q/')[1];
@@ -791,10 +805,11 @@ export default function App() {
           confirmText: 'שלח בוואטסאפ',
           onConfirm: () => {
             setEditingClaim(claim);
-            const msg = `שלום ${claim.customer_name}, מצורף לינק למילוי שאלון שומרה עבור רכב ${claim.car_number}:\n${link}\n\n`;
+            const msg = `שלום ${claim.customer_name}, מצורף לינק למילוי שאלון שומרה עבור רכב ${claim.car_number}:\n🔗 כנס ללינק: ${link}\n\n`;
             setWhatsAppFormData({
               to: claim.customer_phone,
-              message: msg
+              message: msg,
+              additionalInfo: ''
             });
             setIsWhatsAppModalOpen(true);
             setConfirmModal(null);
@@ -2528,28 +2543,42 @@ ${statusLink}
 ${docList}
 ${statusText}${estTimeText}
 ${jotFormText}
-🔗 כנס לסטטוס / העלאת מסמכים:
+🔗 כנס ללינק לסטטוס / העלאת מסמכים:
 ${shortPublicUrl}
 
 בברכה,
 צוות התביעות`;
 
-    if (type === 'whatsapp') {
-      setWhatsAppFormData({
-        to: phone,
-        message: message,
-        additionalInfo: ''
-      });
-      setIsWhatsAppModalOpen(true);
-    } else {
-      setEmailFormData({
-        to: email,
-        subject: `בקשת מסמכים - תביעת רכב ${formData.car_number}`,
-        body: message.replace(/\n/g, '<br>'),
-        attachments: []
-      });
-      setIsEmailModalOpen(true);
-    }
+    // Auto-save before sending
+    const saveAndOpen = async () => {
+      try {
+        const fakeEvent = { preventDefault: () => {} } as React.FormEvent;
+        await handleSubmit(fakeEvent);
+        
+        if (type === 'whatsapp') {
+          setWhatsAppFormData({
+            to: phone,
+            message: message,
+            additionalInfo: ''
+          });
+          setIsWhatsAppModalOpen(true);
+        } else {
+          setEmailFormData({
+            to: email,
+            subject: `בקשת מסמכים - תביעת רכב ${formData.car_number}`,
+            body: message.replace(/\n/g, '<br>').replace(shortPublicUrl, `<a href="${shortPublicUrl}" style="color: #4f46e5; font-weight: bold; text-decoration: underline;">כנס ללינק</a>`),
+            attachments: []
+          });
+          setEmailStep('ask');
+          setIsEmailModalOpen(true);
+        }
+      } catch (err) {
+        console.error("Failed to auto-save before sending request", err);
+        showToast('שגיאה בשמירת הנתונים לפני השליחה', 'error');
+      }
+    };
+
+    saveAndOpen();
   };
 
   const openCommunication = (type: 'email' | 'whatsapp', recipient: 'tp_insurance' | 'garage' | 'appraiser' | 'customer') => {
