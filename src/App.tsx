@@ -41,7 +41,8 @@ import {
   FileCheck,
   CheckCircle2,
   Paperclip,
-  Eye
+  Eye,
+  Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI, Type } from "@google/genai";
@@ -557,6 +558,7 @@ export default function App() {
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
   const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
+  const [isSubmittingClaim, setIsSubmittingClaim] = useState(false);
   const [submitEmail, setSubmitEmail] = useState('');
   const [submitAttachments, setSubmitAttachments] = useState<{path: string, name: string}[]>([]);
   const [submitBody, setSubmitBody] = useState('');
@@ -820,7 +822,7 @@ export default function App() {
       console.error("Error creating questionnaire link:", error);
     }
   };
-  const [emailFormData, setEmailFormData] = useState({ to: '', subject: '', body: '' });
+  const [emailFormData, setEmailFormData] = useState({ to: '', subject: '', body: '', attachments: [] as string[] });
   const [whatsAppFormData, setWhatsAppFormData] = useState({ to: '', message: '', additionalInfo: '' });
 
   const [formData, setFormData] = useState({
@@ -2665,10 +2667,13 @@ ${shortPublicUrl}
   };
 
   const submitClaim = async () => {
-    if (!editingClaim) return;
+    if (!editingClaim || isSubmittingClaim) return;
     
     try {
+      setIsSubmittingClaim(true);
+      console.log(`[Submit Claim] Starting submission for claim ${editingClaim.id}`);
       showToast('מגיש תביעה...', 'info');
+      
       const res = await fetch(`/api/claims/${editingClaim.id}/submit-claim`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2680,6 +2685,8 @@ ${shortPublicUrl}
         })
       });
       
+      console.log(`[Submit Claim] Response status: ${res.status}`);
+      
       if (res.ok) {
         showToast('התביעה הוגשה בהצלחה', 'success');
         setIsSubmitModalOpen(false);
@@ -2690,11 +2697,14 @@ ${shortPublicUrl}
         setIsModalOpen(false);
       } else {
         const err = await res.json();
+        console.error(`[Submit Claim] Server error:`, err);
         showToast(`שגיאה בהגשת תביעה: ${err.error}`, 'error');
       }
-    } catch (error) {
-      console.error('Error submitting claim:', error);
-      showToast('שגיאה בתקשורת עם השרת', 'error');
+    } catch (error: any) {
+      console.error('[Submit Claim] Network error:', error);
+      showToast(`שגיאה בתקשורת עם השרת: ${error.message}`, 'error');
+    } finally {
+      setIsSubmittingClaim(false);
     }
   };
 
@@ -4373,7 +4383,7 @@ ${shortPublicUrl}
                                 disabled={!formData.demand_letter_path}
                                 className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold transition-all shadow-lg active:scale-95 ${
                                   formData.demand_letter_path 
-                                    ? 'bg-purple-400 text-white hover:bg-purple-500' 
+                                    ? 'bg-blue-900 text-white hover:bg-blue-800' 
                                     : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                                 }`}
                               >
@@ -5394,33 +5404,41 @@ ${shortPublicUrl}
       <AnimatePresence>
         {isEntityModalOpen && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsEntityModalOpen(false)} className="absolute inset-0 bg-slate-900/20 backdrop-blur-[2px]" />
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative bg-white w-full max-w-md rounded-2xl shadow-2xl p-6">
-              <h3 className="text-lg font-bold mb-6">{editingEntity ? 'עדכון גוף' : 'הוספת גוף חדש'}</h3>
-              <form onSubmit={handleEntitySubmit} className="space-y-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsEntityModalOpen(false)} className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
+              <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                <h2 className="text-lg font-bold text-slate-900">{editingEntity ? 'עדכון ישות' : 'הוספת ישות חדשה'}</h2>
+                <button onClick={() => setIsEntityModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors"><X size={20} /></button>
+              </div>
+              <form onSubmit={handleEntitySubmit} className="p-6 space-y-4 text-right" dir="rtl">
                 <div className="space-y-1">
-                  <label className="text-sm font-medium text-slate-700">סוג</label>
-                  <select className="w-full px-4 py-2 border border-slate-200 rounded-xl outline-none focus:border-indigo-500 bg-white" value={entityFormData.type} onChange={e => setEntityFormData({...entityFormData, type: e.target.value as any})}>
+                  <label className="text-sm font-medium text-slate-700 block">סוג</label>
+                  <select 
+                    required
+                    className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all bg-white" 
+                    value={entityFormData.type} 
+                    onChange={(e) => setEntityFormData({...entityFormData, type: e.target.value as any})}
+                  >
                     <option value="garage">מוסך</option>
                     <option value="appraiser">שמאי</option>
                     <option value="insurance">חברת ביטוח</option>
                   </select>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-sm font-medium text-slate-700">שם</label>
-                  <input required type="text" className="w-full px-4 py-2 border border-slate-200 rounded-xl outline-none focus:border-indigo-500" value={entityFormData.name} onChange={e => setEntityFormData({...entityFormData, name: e.target.value})} />
+                  <label className="text-sm font-medium text-slate-700 block">שם</label>
+                  <input required type="text" className="w-full px-4 py-2 border border-slate-200 rounded-xl outline-none focus:border-indigo-500" value={entityFormData.name} onChange={(e) => setEntityFormData({...entityFormData, name: e.target.value})} />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-sm font-medium text-slate-700">טלפון</label>
-                  <input type="tel" className="w-full px-4 py-2 border border-slate-200 rounded-xl outline-none focus:border-indigo-500" value={entityFormData.phone} onChange={e => setEntityFormData({...entityFormData, phone: e.target.value})} />
+                  <label className="text-sm font-medium text-slate-700 block">טלפון</label>
+                  <input type="tel" className="w-full px-4 py-2 border border-slate-200 rounded-xl outline-none focus:border-indigo-500" value={entityFormData.phone} onChange={(e) => setEntityFormData({...entityFormData, phone: e.target.value})} />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-sm font-medium text-slate-700">מייל</label>
-                  <input type="email" className="w-full px-4 py-2 border border-slate-200 rounded-xl outline-none focus:border-indigo-500" value={entityFormData.email} onChange={e => setEntityFormData({...entityFormData, email: e.target.value})} />
+                  <label className="text-sm font-medium text-slate-700 block">מייל</label>
+                  <input type="email" className="w-full px-4 py-2 border border-slate-200 rounded-xl outline-none focus:border-indigo-500" value={entityFormData.email} onChange={(e) => setEntityFormData({...entityFormData, email: e.target.value})} />
                 </div>
-                <div className="pt-4 flex gap-2">
-                  <button type="submit" className="flex-1 bg-indigo-600 text-white py-2 rounded-xl font-bold">שמור</button>
-                  <button type="button" onClick={() => setIsEntityModalOpen(false)} className="px-4 py-2 border border-slate-200 rounded-xl">ביטול</button>
+                <div className="pt-4 flex gap-3">
+                  <button type="submit" className="flex-1 bg-indigo-600 text-white py-2.5 rounded-xl font-bold hover:bg-indigo-700 transition-all">שמור</button>
+                  <button type="button" onClick={() => setIsEntityModalOpen(false)} className="px-6 py-2.5 border border-slate-200 text-slate-600 rounded-xl font-medium hover:bg-slate-50 transition-all">ביטול</button>
                 </div>
               </form>
             </motion.div>
@@ -5431,52 +5449,39 @@ ${shortPublicUrl}
       {/* Garage Search Modal */}
       <AnimatePresence>
         {isGarageSearchModalOpen && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsGarageSearchModalOpen(false)} className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
-            <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="relative bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
-              <div className={`px-6 py-4 border-b border-slate-100 flex items-center justify-between ${garageSearchType === 'importer' ? 'bg-emerald-50' : 'bg-indigo-50'} shrink-0`}>
-                <div className="flex items-center gap-2">
-                  <div className={`p-1.5 ${garageSearchType === 'importer' ? 'bg-emerald-100 text-emerald-600' : 'bg-indigo-100 text-indigo-600'} rounded-lg`}>
-                    {garageSearchType === 'importer' ? <Search size={18} /> : <LayoutGrid size={18} />}
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsGarageSearchModalOpen(false)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
+            <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="relative bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+              <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-blue-900 text-white shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-white/20 rounded-xl"><Search size={24} /></div>
+                  <div>
+                    <h2 className="text-xl font-bold">חיפוש מוסך {garageSearchType === 'importer' ? 'יבואן' : 'הסדר'}</h2>
+                    <p className="text-blue-100 text-xs">חברת ביטוח: {formData.insurance_company}</p>
                   </div>
-                  <h2 className="text-xl font-bold text-slate-900">
-                    {garageSearchType === 'importer' ? 'איתור מוסכי יבואן' : 'רשימת מוסכי הסדר'} - {formData.insurance_company}
-                  </h2>
                 </div>
-                <button onClick={() => setIsGarageSearchModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors"><X size={24} /></button>
+                <button onClick={() => setIsGarageSearchModalOpen(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors"><X size={24} /></button>
               </div>
               
-              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              <div className="p-6 overflow-y-auto bg-slate-50 flex-1">
                 {isSearchingGarages ? (
-                  <div className="flex flex-col items-center justify-center py-12 space-y-4">
-                    <div className={`w-12 h-12 border-4 ${garageSearchType === 'importer' ? 'border-emerald-100 border-t-emerald-600' : 'border-indigo-100 border-t-indigo-600'} rounded-full animate-spin`} />
-                    <p className="text-slate-500 font-medium animate-pulse">
-                      {garageSearchType === 'importer' 
-                        ? `מחפש מוסכי יבואן עבור ${formData.car_model}...` 
-                        : `טוען רשימת מוסכי הסדר עבור ${formData.insurance_company}...`}
-                    </p>
+                  <div className="flex flex-col items-center justify-center py-20 space-y-4">
+                    <div className="w-12 h-12 border-4 border-blue-900/20 border-t-blue-900 rounded-full animate-spin" />
+                    <p className="text-slate-500 font-medium">מחפש מוסכים מתאימים...</p>
                   </div>
                 ) : garageSearchResults.length > 0 ? (
                   <div className="space-y-4">
-                    {formData.customer_address && garageSearchType === 'agreement' && (
-                      <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center gap-2 text-indigo-700 text-sm">
-                        <MapPin size={16} />
-                        <span>מציג מוסכים באזור: <strong>{formData.customer_address}</strong></span>
-                      </div>
-                    )}
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm font-bold text-slate-600">נמצאו {garageSearchResults.length} מוסכים:</p>
+                    </div>
                     <div className="grid grid-cols-1 gap-4">
-                      {garageSearchResults.map((garage, idx) => (
-                      <div key={idx} className="p-4 border border-slate-200 rounded-xl hover:border-emerald-300 hover:bg-emerald-50/30 transition-all group">
-                        <div className="flex justify-between items-start mb-2">
+                    {garageSearchResults.map((garage, idx) => (
+                      <div key={idx} className="bg-white p-5 rounded-2xl border border-slate-200 hover:border-blue-900/30 hover:shadow-xl hover:shadow-blue-900/5 transition-all group">
+                        <div className="flex justify-between items-start mb-3">
                           <div>
-                            <h4 className="font-bold text-slate-900 flex items-center gap-2">
-                              {garage.name}
-                              {garage.is_importer && (
-                                <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">מוסך יבואן</span>
-                              )}
-                            </h4>
-                            <p className="text-xs text-slate-500 flex items-center gap-1 mt-1">
-                              <Building2 size={12} /> {garage.location}
+                            <h3 className="font-bold text-slate-900 text-lg group-hover:text-blue-900 transition-colors">{garage.name}</h3>
+                            <p className="text-sm text-slate-500 flex items-center gap-1">
+                              <MapPin size={14} className="text-blue-900" /> {garage.address}
                             </p>
                           </div>
                           <button 
@@ -5484,49 +5489,56 @@ ${shortPublicUrl}
                               setFormData(prev => ({
                                 ...prev,
                                 garage_name: garage.name,
+                                garage_address: garage.address,
                                 garage_phone: garage.phone || prev.garage_phone,
-                                garage_settlement: 'מוסך הסדר'
+                                garage_settlement: garageSearchType === 'agreement' ? 'מוסך הסדר' : 'מוסך יבואן'
                               }));
                               setIsGarageSearchModalOpen(false);
                               showToast(`המוסך ${garage.name} נבחר`, 'success');
                             }}
-                            className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-emerald-700 transition-all shadow-sm"
+                            className="bg-blue-900 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-blue-800 transition-all shadow-lg shadow-blue-100 active:scale-95"
                           >
                             בחר מוסך
                           </button>
                         </div>
                         {garage.phone && (
-                          <p className="text-xs text-slate-600 flex items-center gap-1 mb-2">
-                            <Phone size={12} /> {garage.phone}
+                          <p className="text-sm text-slate-600 flex items-center gap-2 mb-3">
+                            <div className="p-1.5 bg-slate-100 rounded-lg"><Phone size={14} className="text-blue-900" /></div>
+                            <span dir="ltr">{garage.phone}</span>
                           </p>
                         )}
                         {garage.description && (
-                          <p className="text-xs text-slate-500 leading-relaxed bg-white/50 p-2 rounded-lg border border-slate-100">{garage.description}</p>
+                          <div className="text-xs text-slate-500 leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-100 italic">
+                            {garage.description}
+                          </div>
                         )}
                       </div>
                     ))}
                     </div>
                   </div>
                 ) : (
-                  <div className="text-center py-12 space-y-4">
-                    <div className="w-16 h-16 bg-slate-50 text-slate-300 rounded-full flex items-center justify-center mx-auto">
-                      <AlertCircle size={32} />
+                  <div className="text-center py-16 space-y-4">
+                    <div className="w-20 h-20 bg-white text-slate-200 rounded-full flex items-center justify-center mx-auto shadow-inner">
+                      <AlertCircle size={40} />
                     </div>
-                    <p className="text-slate-500">לא נמצאו תוצאות. נסה לחפש ידנית באתר חברת הביטוח.</p>
+                    <div>
+                      <p className="text-slate-600 font-bold text-lg">לא נמצאו תוצאות לחיפוש זה</p>
+                      <p className="text-slate-400 text-sm mt-1">נסה לחפש ידנית באתר חברת הביטוח או להזין פרטים ידנית.</p>
+                    </div>
                     <a 
                       href={INSURANCE_GARAGE_URLS[formData.insurance_company] || '#'} 
                       target="_blank" 
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 text-indigo-600 font-bold hover:underline"
+                      className="inline-flex items-center gap-2 bg-white text-blue-900 px-6 py-3 rounded-xl font-bold border-2 border-blue-900 hover:bg-blue-50 transition-all shadow-sm"
                     >
-                      מעבר לאתר {formData.insurance_company} <ExternalLink size={14} />
+                      מעבר לאתר {formData.insurance_company} <ExternalLink size={16} />
                     </a>
                   </div>
                 )}
               </div>
               
-              <div className="p-4 bg-slate-50 border-t border-slate-100 text-center">
-                <p className="text-[10px] text-slate-400">המידע מבוסס על חיפוש חכם ועשוי להשתנות. מומלץ לוודא מול חברת הביטוח.</p>
+              <div className="p-4 bg-white border-t border-slate-100 text-center">
+                <p className="text-[10px] text-slate-400 font-medium">המידע מבוסס על חיפוש חכם ועשוי להשתנות. מומלץ לוודא מול חברת הביטוח.</p>
               </div>
             </motion.div>
           </div>
@@ -5547,7 +5559,7 @@ ${shortPublicUrl}
               <div className="p-6 overflow-y-auto">
                 {emailStep === 'ask' ? (
                   <div className="text-center space-y-6 py-4">
-                    <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto">
+                    <div className="w-16 h-16 bg-blue-50 text-blue-900 rounded-full flex items-center justify-center mx-auto">
                       <Mail size={32} />
                     </div>
                     <div>
@@ -5557,104 +5569,108 @@ ${shortPublicUrl}
                     <div className="flex flex-col gap-3">
                       <button 
                         onClick={() => setEmailStep('edit')}
-                        className="w-full py-3 bg-white border-2 border-indigo-600 text-indigo-600 rounded-xl font-bold hover:bg-indigo-50 transition-all"
+                        className="w-full py-3 bg-white border-2 border-blue-900 text-blue-900 rounded-xl font-bold hover:bg-blue-50 transition-all"
                       >
                         כן, אני רוצה להוסיף מידע
                       </button>
                       <button 
                         onClick={handleSendEmail}
                         disabled={isSendingEmail}
-                        className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 flex items-center justify-center gap-2"
+                        className="w-full py-3 bg-blue-900 text-white rounded-xl font-bold hover:bg-blue-800 transition-all shadow-lg shadow-blue-100 flex items-center justify-center gap-2"
                       >
                         {isSendingEmail ? (
-                          <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          <Loader2 className="w-5 h-5 animate-spin" />
                         ) : (
-                          <Send size={18} />
+                          <>
+                            <Send size={20} />
+                            שלח מייל עכשיו
+                          </>
                         )}
-                        לא, שלח עכשיו
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
+                  <div className="space-y-4 text-right" dir="rtl">
                     <div className="space-y-1">
-                      <label className="text-sm font-medium text-slate-700">אל</label>
-                      <div className="flex gap-2">
-                        <input type="email" className="flex-1 px-4 py-2 border border-slate-200 rounded-xl outline-none focus:border-indigo-500" value={emailFormData.to} onChange={e => setEmailFormData({...emailFormData, to: e.target.value})} />
-                        <select 
-                          className="px-4 py-2 border border-slate-200 rounded-xl outline-none bg-slate-50 text-xs"
-                          onChange={(e) => setEmailFormData({...emailFormData, to: e.target.value})}
-                          value=""
-                        >
-                          <option value="" disabled>בחר נמען...</option>
-                          {editingClaim.customer_email && <option value={editingClaim.customer_email}>לקוח: {editingClaim.customer_name}</option>}
-                          {entities.filter(ent => ent.email).map(ent => (
-                            <option key={ent.id} value={ent.email}>{ent.type === 'insurance' ? 'ביטוח' : ent.type === 'appraiser' ? 'שמאי' : 'מוסך'}: {ent.name}</option>
-                          ))}
-                        </select>
-                      </div>
+                      <label className="text-sm font-medium text-slate-700 block">אל</label>
+                      <input type="email" className="w-full px-4 py-2 border border-slate-200 rounded-xl outline-none focus:border-blue-900" value={emailFormData.to} onChange={(e) => setEmailFormData({...emailFormData, to: e.target.value})} />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-sm font-medium text-slate-700">נושא</label>
-                      <input type="text" className="w-full px-4 py-2 border border-slate-200 rounded-xl outline-none focus:border-indigo-500" value={emailFormData.subject} onChange={e => setEmailFormData({...emailFormData, subject: e.target.value})} />
+                      <label className="text-sm font-medium text-slate-700 block">נושא</label>
+                      <input type="text" className="w-full px-4 py-2 border border-slate-200 rounded-xl outline-none focus:border-blue-900" value={emailFormData.subject} onChange={(e) => setEmailFormData({...emailFormData, subject: e.target.value})} />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-sm font-medium text-slate-700">תוכן המייל</label>
-                      <textarea rows={6} className="w-full px-4 py-2 border border-slate-200 rounded-xl outline-none focus:border-indigo-500 resize-none" value={emailFormData.body} onChange={e => setEmailFormData({...emailFormData, body: e.target.value})} />
+                      <label className="text-sm font-medium text-slate-700 block">תוכן</label>
+                      <textarea rows={6} className="w-full px-4 py-2 border border-slate-200 rounded-xl outline-none focus:border-blue-900 resize-none" value={emailFormData.body} onChange={(e) => setEmailFormData({...emailFormData, body: e.target.value})} />
                     </div>
+                    
                     <div className="space-y-2">
-                      <label className="text-sm font-medium text-slate-700">קבצים מצורפים</label>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto p-2 bg-slate-50 rounded-xl border border-slate-100">
-                        {Object.keys(DOC_LABELS).map(field => {
-                          const path = (editingClaim as any)[field];
+                      <label className="text-sm font-medium text-slate-700 block">קבצים מצורפים</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { key: 'claim_form_path', label: 'טופס תביעה' },
+                          { key: 'appraiser_report_path', label: 'דו"ח שמאי' },
+                          { key: 'driver_license_path', label: 'רישיון נהיגה' },
+                          { key: 'vehicle_license_path', label: 'רישיון רכב' },
+                          { key: 'appraiser_invoice_path', label: 'חשבונית שמאי' },
+                          { key: 'appraiser_photos_path', label: 'תמונות שמאי' },
+                          { key: 'garage_invoice_path', label: 'חשבונית מוסך' },
+                          { key: 'demand_letter_path', label: 'מכתב דרישה' }
+                        ].map((doc) => {
+                          const path = (editingClaim as any)[doc.key];
                           if (!path) return null;
-                          const isSelected = emailFormData.attachments.includes(path);
+                          const isSelected = emailFormData.attachments?.includes(path);
                           return (
-                            <label key={field} className="flex items-center gap-2 p-2 bg-white rounded-lg border border-slate-100 cursor-pointer hover:bg-slate-50 transition-colors">
-                              <input 
-                                type="checkbox" 
-                                checked={isSelected}
-                                onChange={() => {
-                                  const newAttachments = isSelected 
-                                    ? emailFormData.attachments.filter(a => a !== path)
-                                    : [...emailFormData.attachments, path];
-                                  setEmailFormData({...emailFormData, attachments: newAttachments});
-                                }}
-                                className="rounded text-indigo-600"
-                              />
-                              <span className="text-xs font-medium text-slate-700 truncate">{DOC_LABELS[field]}</span>
-                            </label>
+                            <button
+                              key={doc.key}
+                              type="button"
+                              onClick={() => {
+                                const current = emailFormData.attachments || [];
+                                const next = isSelected 
+                                  ? current.filter(p => p !== path)
+                                  : [...current, path];
+                                setEmailFormData({...emailFormData, attachments: next});
+                              }}
+                              className={`flex items-center gap-2 p-2 rounded-lg border text-xs transition-all ${
+                                isSelected 
+                                  ? 'bg-blue-50 border-blue-900 text-blue-900' 
+                                  : 'bg-white border-slate-200 text-slate-600 hover:border-blue-200'
+                              }`}
+                            >
+                              {isSelected ? <CheckCircle2 size={14} /> : <div className="w-3.5 h-3.5 rounded-full border border-slate-300" />}
+                              {doc.label}
+                            </button>
                           );
                         })}
                       </div>
                     </div>
-                    <div className="pt-4 flex gap-2">
+
+                    <div className="pt-4 flex gap-3">
                       <button 
-                        type="button"
-                        disabled={isSendingEmail}
                         onClick={handleSendEmail}
-                        className={`flex-1 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${isSendingEmail ? 'bg-slate-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-200'}`}
+                        disabled={isSendingEmail}
+                        className="flex-1 bg-blue-900 text-white py-3 rounded-xl font-bold hover:bg-blue-800 transition-all flex items-center justify-center gap-2"
                       >
-                        {isSendingEmail ? (
-                          <>
-                            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                            שולח...
-                          </>
-                        ) : (
-                          <>
-                            <Send size={20} /> שלח מייל
-                          </>
-                        )}
+                        {isSendingEmail ? <Loader2 className="animate-spin" size={20} /> : <Send size={20} />}
+                        שלח מייל
                       </button>
-                      <button type="button" onClick={() => setIsEmailModalOpen(false)} className="px-6 py-3 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">ביטול</button>
+                      <button 
+                        onClick={() => setEmailStep('ask')}
+                        className="px-6 py-3 border border-slate-200 text-slate-600 rounded-xl font-medium hover:bg-slate-50 transition-all"
+                      >
+                        חזור
+                      </button>
                     </div>
-                  </form>
+                  </div>
                 )}
               </div>
             </motion.div>
           </div>
         )}
+      </AnimatePresence>
 
+      {/* WhatsApp Modal */}
+      <AnimatePresence>
         {isWhatsAppModalOpen && editingClaim && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsWhatsAppModalOpen(false)} className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
@@ -5720,15 +5736,15 @@ ${shortPublicUrl}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-200"
             >
-              <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-purple-200 text-slate-800">
+              <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-blue-900 text-white">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-purple-400/20 rounded-xl"><Mail size={24} className="text-purple-600" /></div>
+                  <div className="p-2 bg-white/20 rounded-xl"><Mail size={24} className="text-white" /></div>
                   <div>
                     <h2 className="text-xl font-bold">הגשת תביעה לחברת הביטוח</h2>
-                    <p className="text-sm text-slate-600 opacity-90">{editingClaim?.customer_name} | {editingClaim?.claim_number}</p>
+                    <p className="text-sm text-blue-100 opacity-90">{editingClaim?.customer_name} | {editingClaim?.claim_number}</p>
                   </div>
                 </div>
-                <button onClick={() => setIsSubmitModalOpen(false)} className="p-2 hover:bg-black/5 rounded-full transition-colors">
+                <button onClick={() => setIsSubmitModalOpen(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors text-white">
                   <X size={24} />
                 </button>
               </div>
@@ -5736,9 +5752,9 @@ ${shortPublicUrl}
               <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
                 <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-4">
                   <div className="flex items-center gap-2 text-slate-700 font-bold">
-                    <Building2 size={18} className="text-purple-400" />
+                    <Building2 size={18} className="text-blue-900" />
                     <span>חברת ביטוח נתבעת:</span>
-                    <span className="text-purple-600">{editingClaim?.third_party_insurance_company || editingClaim?.insurance_company}</span>
+                    <span className="text-blue-800">{editingClaim?.third_party_insurance_company || editingClaim?.insurance_company}</span>
                   </div>
                   
                   <div className="space-y-1">
@@ -5749,7 +5765,7 @@ ${shortPublicUrl}
                         type="email"
                         value={submitEmail}
                         onChange={(e) => setSubmitEmail(e.target.value)}
-                        className="w-full pr-10 pl-4 py-2.5 bg-white border-2 border-slate-200 rounded-xl focus:border-purple-400 outline-none transition-all"
+                        className="w-full pr-10 pl-4 py-2.5 bg-white border-2 border-slate-200 rounded-xl focus:border-blue-900 outline-none transition-all"
                         placeholder="הכנס מייל של חברת הביטוח..."
                       />
                     </div>
@@ -5761,19 +5777,19 @@ ${shortPublicUrl}
                   <textarea
                     value={submitBody}
                     onChange={(e) => setSubmitBody(e.target.value)}
-                    className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl focus:border-purple-400 focus:ring-0 transition-all min-h-[120px] text-right"
+                    className="w-full p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl focus:border-blue-900 focus:ring-0 transition-all min-h-[120px] text-right"
                     placeholder="הוסף מלל למייל..."
                     dir="rtl"
                   />
                 </div>
 
-                <div className="bg-purple-50 p-4 rounded-2xl border border-purple-100">
+                <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
                   <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-sm font-bold text-purple-800 flex items-center gap-2">
+                    <h4 className="text-sm font-bold text-blue-900 flex items-center gap-2">
                       <Paperclip size={16} />
                       קבצים מצורפים ({submitAttachments.length}):
                     </h4>
-                    <label className="cursor-pointer bg-purple-400 text-white px-3 py-1 rounded-lg text-xs font-bold hover:bg-purple-500 transition-all flex items-center gap-1">
+                    <label className="cursor-pointer bg-blue-900 text-white px-3 py-1 rounded-lg text-xs font-bold hover:bg-blue-800 transition-all flex items-center gap-1">
                       <Plus size={14} />
                       הוסף קובץ ידני
                       <input 
@@ -5787,17 +5803,17 @@ ${shortPublicUrl}
                   
                   <div className="space-y-2">
                     {submitAttachments.map((att, idx) => (
-                      <div key={idx} className="flex items-center justify-between p-2 bg-white border border-purple-200 rounded-xl group">
+                      <div key={idx} className="flex items-center justify-between p-2 bg-white border border-blue-200 rounded-xl group">
                         <div className="flex items-center gap-2 overflow-hidden">
-                          <File size={14} className="text-purple-400 shrink-0" />
-                          <span className="text-xs text-purple-700 font-medium truncate">
+                          <File size={14} className="text-blue-900 shrink-0" />
+                          <span className="text-xs text-blue-900 font-medium truncate">
                             {att.name}
                           </span>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
                           <button 
                             onClick={() => window.open(att.path, '_blank')}
-                            className="p-1.5 text-purple-400 hover:bg-purple-50 rounded-lg transition-colors"
+                            className="p-1.5 text-blue-900 hover:bg-blue-50 rounded-lg transition-colors"
                             title="תצוגה מקדימה"
                           >
                             <Eye size={14} />
@@ -5813,7 +5829,7 @@ ${shortPublicUrl}
                       </div>
                     ))}
                     {submitAttachments.length === 0 && (
-                      <p className="text-center text-xs text-purple-300 py-2 italic">אין קבצים מצורפים</p>
+                      <p className="text-center text-xs text-blue-300 py-2 italic">אין קבצים מצורפים</p>
                     )}
                   </div>
                 </div>
@@ -5828,12 +5844,12 @@ ${shortPublicUrl}
                 </button>
                 <button
                   onClick={submitClaim}
-                  disabled={!submitEmail}
+                  disabled={!submitEmail || isSubmittingClaim}
                   className={`px-8 py-2.5 text-white font-bold rounded-xl shadow-lg transition-all active:scale-95 flex items-center gap-2 ${
-                    submitEmail ? 'bg-purple-400 hover:bg-purple-500 shadow-purple-100' : 'bg-slate-400 cursor-not-allowed'
+                    submitEmail && !isSubmittingClaim ? 'bg-blue-900 hover:bg-blue-800 shadow-blue-100' : 'bg-slate-400 cursor-not-allowed'
                   }`}
                 >
-                  <Send size={18} />
+                  {isSubmittingClaim ? <Loader2 className="animate-spin" size={18} /> : <Send size={18} />}
                   שלח תביעה
                 </button>
               </div>

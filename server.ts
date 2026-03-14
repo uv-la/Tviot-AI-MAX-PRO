@@ -928,15 +928,22 @@ async function startServer() {
       }));
 
       const filteredAttachments = mailAttachments.filter(Boolean);
+      console.log(`[Submit Claim] Sending email to: ${to}, BCC: ${bcc}, Attachments: ${filteredAttachments.length}`);
 
-      await transporter.sendMail({
-        from: process.env.SMTP_FROM || process.env.SMTP_USER || "noreply@claims-app.com",
-        to,
-        bcc,
-        subject,
-        text: body,
-        attachments: filteredAttachments,
-      });
+      try {
+        await transporter.sendMail({
+          from: process.env.SMTP_FROM || process.env.SMTP_USER || "noreply@claims-app.com",
+          to,
+          bcc,
+          subject,
+          text: body,
+          attachments: filteredAttachments,
+        });
+        console.log(`[Submit Claim] Email sent successfully to ${to}`);
+      } catch (mailError: any) {
+        console.error(`[Submit Claim] Nodemailer error:`, mailError);
+        throw new Error(`שגיאה בשליחת המייל: ${mailError.message}`);
+      }
 
       await db.collection("claim_logs").insertOne({
         claim_id: id,
