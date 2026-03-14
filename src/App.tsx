@@ -2674,6 +2674,9 @@ ${shortPublicUrl}
       console.log(`[Submit Claim] Starting submission for claim ${editingClaim.id}`);
       showToast('מגיש תביעה...', 'info');
       
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
+      
       const res = await fetch(`/api/claims/${editingClaim.id}/submit-claim`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2682,8 +2685,10 @@ ${shortPublicUrl}
           body: submitBody,
           attachments: submitAttachments,
           to: submitEmail
-        })
+        }),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
       
       console.log(`[Submit Claim] Response status: ${res.status}`);
       

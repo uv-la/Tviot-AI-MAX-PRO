@@ -928,10 +928,10 @@ async function startServer() {
       }));
 
       const filteredAttachments = mailAttachments.filter(Boolean);
-      console.log(`[Submit Claim] Sending email to: ${to}, BCC: ${bcc}, Attachments: ${filteredAttachments.length}`);
+      console.log(`[Submit Claim] Processing ${filteredAttachments.length} attachments...`);
 
       try {
-        await transporter.sendMail({
+        const sendMailPromise = transporter.sendMail({
           from: process.env.SMTP_FROM || process.env.SMTP_USER || "noreply@claims-app.com",
           to,
           bcc,
@@ -939,6 +939,13 @@ async function startServer() {
           text: body,
           attachments: filteredAttachments,
         });
+
+        // Timeout after 45 seconds
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error("שליחת המייל ארכה זמן רב מדי. אנא בדוק את הגדרות ה-SMTP שלך או נסה שוב.")), 45000)
+        );
+
+        await Promise.race([sendMailPromise, timeoutPromise]);
         console.log(`[Submit Claim] Email sent successfully to ${to}`);
       } catch (mailError: any) {
         console.error(`[Submit Claim] Nodemailer error:`, mailError);
@@ -1264,11 +1271,16 @@ async function startServer() {
   });
 
   // Helper to get email transporter
-  async function getTransporter() {
-    if (!process.env.SMTP_USER) {
-      console.log("No SMTP credentials found. Using Ethereal Email for testing...");
+let cachedTransporter: any = null;
+
+async function getTransporter() {
+  if (cachedTransporter) return cachedTransporter;
+  
+  if (!process.env.SMTP_USER) {
+    console.log("No SMTP credentials found. Using Ethereal Email for testing...");
+    try {
       const testAccount = await nodemailer.createTestAccount();
-      return nodemailer.createTransport({
+      cachedTransporter = nodemailer.createTransport({
         host: "smtp.ethereal.email",
         port: 587,
         secure: false,
@@ -1276,30 +1288,49 @@ async function startServer() {
           user: testAccount.user,
           pass: testAccount.pass,
         },
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 20000,
+      });
+      return cachedTransporter;
+    } catch (e) {
+      console.error("Failed to create Ethereal test account:", e);
+      return {
+        sendMail: () => Promise.reject(new Error("לא הוגדרו פרטי SMTP ולא ניתן היה ליצור חשבון בדיקה. אנא הגדר SMTP_USER ו-SMTP_PASS."))
+      };
+    }
+  } else {
+    const isGmail = process.env.SMTP_HOST?.includes('gmail.com');
+    const config: any = {
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 30000,
+    };
+
+    if (isGmail) {
+      cachedTransporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS,
+        },
+        ...config
       });
     } else {
-      const isGmail = process.env.SMTP_HOST?.includes('gmail.com');
-      if (isGmail) {
-        return nodemailer.createTransport({
-          service: 'gmail',
-          auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS,
-          },
-        });
-      } else {
-        return nodemailer.createTransport({
-          host: process.env.SMTP_HOST,
-          port: parseInt(process.env.SMTP_PORT || "587"),
-          secure: process.env.SMTP_SECURE === "true",
-          auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS,
-          },
-        });
-      }
+      cachedTransporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST,
+        port: parseInt(process.env.SMTP_PORT || "587"),
+        secure: process.env.SMTP_SECURE === "true",
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS,
+        },
+        ...config
+      });
     }
+    return cachedTransporter;
   }
+}
 
   // Email Sending
   app.post("/api/send-email", async (req, res) => {
