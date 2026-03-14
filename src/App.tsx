@@ -259,6 +259,14 @@ const DOC_LABELS: Record<string, string> = {
   demand_letter_path: 'מכתב דרישה'
 };
 
+const CUSTOMER_DOCS = [
+  'claim_form_path', 'policy_file_path', 'vehicle_license_path', 'driver_license_path', 
+  'driver_license_back_path', 'id_copy_path', 'bank_confirmation_path', 'no_claims_path', 
+  'police_report_path', 'consent_form_path', 'power_of_attorney_path', 'no_submission_path'
+];
+const APPRAISER_DOCS = ['appraiser_report_path', 'appraiser_invoice_path', 'appraiser_photos_path'];
+const GARAGE_DOCS = ['garage_invoice_path'];
+
 const JOTFORM_LINKS: Record<string, string> = {
   'איילון': 'https://form.jotform.com/232780982444060',
   'שומרה': 'https://form.jotform.com/232783244966467',
@@ -369,10 +377,12 @@ function PublicClaimUpdates({ claimId }: { claimId: string }) {
     </div>
   );
 
-  const requestedDocs = party === 'customer' ? claimInfo.requested_docs_customer :
-                        party === 'appraiser' ? claimInfo.requested_docs_appraiser :
-                        party === 'garage' ? claimInfo.requested_docs_garage :
-                        claimInfo.requested_docs;
+  const requestedDocs = (claimInfo.marked_docs || []).filter(d => {
+    if (party === 'customer') return CUSTOMER_DOCS.includes(d);
+    if (party === 'appraiser') return APPRAISER_DOCS.includes(d);
+    if (party === 'garage') return GARAGE_DOCS.includes(d);
+    return true;
+  });
 
   const calculateRemainingTime = () => {
     if (!claimInfo?.claim_date || !claimInfo?.estimated_processing_days || claimInfo?.estimated_processing_days === 'לא ידוע עדיין') {
@@ -2518,14 +2528,6 @@ ${statusLink}
   };
 
   const sendDocumentRequests = (party: 'customer' | 'appraiser' | 'garage', type: 'whatsapp' | 'email') => {
-    const CUSTOMER_DOCS = [
-      'claim_form_path', 'policy_file_path', 'vehicle_license_path', 'driver_license_path', 
-      'driver_license_back_path', 'id_copy_path', 'bank_confirmation_path', 'no_claims_path', 
-      'police_report_path', 'consent_form_path', 'power_of_attorney_path', 'no_submission_path'
-    ];
-    const APPRAISER_DOCS = ['appraiser_report_path', 'appraiser_invoice_path', 'appraiser_photos_path'];
-    const GARAGE_DOCS = ['garage_invoice_path'];
-
     let docs: string[] = [];
     let phone = '';
     let email = '';
@@ -2533,21 +2535,27 @@ ${statusLink}
     
     const allMarked = formData.marked_docs || [];
 
+    const isMissing = (field: string) => {
+      const val = (formData as any)[field];
+      if (Array.isArray(val)) return val.length === 0;
+      return !val;
+    };
+
     if (party === 'customer') {
-      docs = allMarked.filter(d => CUSTOMER_DOCS.includes(d));
+      docs = allMarked.filter(d => CUSTOMER_DOCS.includes(d) && isMissing(d));
       phone = formData.customer_phone || '';
       email = formData.customer_email || '';
       name = formData.customer_name;
       // Sync to requested_docs_customer for the public page
       setFormData(prev => ({ ...prev, requested_docs_customer: docs }));
     } else if (party === 'appraiser') {
-      docs = allMarked.filter(d => APPRAISER_DOCS.includes(d));
+      docs = allMarked.filter(d => APPRAISER_DOCS.includes(d) && isMissing(d));
       phone = formData.appraiser_phone || '';
       email = formData.appraiser_email || '';
       name = formData.appraiser_name;
       setFormData(prev => ({ ...prev, requested_docs_appraiser: docs }));
     } else if (party === 'garage') {
-      docs = allMarked.filter(d => GARAGE_DOCS.includes(d));
+      docs = allMarked.filter(d => GARAGE_DOCS.includes(d) && isMissing(d));
       phone = formData.garage_phone || '';
       email = formData.garage_email || '';
       name = formData.garage_name;

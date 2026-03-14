@@ -410,7 +410,8 @@ async function startServer() {
         power_of_attorney_path: claim.power_of_attorney_path,
         no_submission_path: claim.no_submission_path,
         lien_confirmation_path: claim.lien_confirmation_path,
-        accountant_confirmation_path: claim.accountant_confirmation_path
+        accountant_confirmation_path: claim.accountant_confirmation_path,
+        marked_docs: claim.marked_docs || []
       });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
