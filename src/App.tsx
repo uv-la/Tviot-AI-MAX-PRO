@@ -1793,9 +1793,7 @@ ${statusLink}
       console.error('Error logging WhatsApp action:', error);
     }
     
-    // Keep the modal open so the user can see it was successful, or close it if preferred.
-    // The user requested not to close the "page", which might include this modal.
-    // However, usually we close it. Let's try keeping it open but showing success.
+    setIsWhatsAppModalOpen(false);
     window.open(whatsappUrl, '_blank');
   };
 
