@@ -1655,7 +1655,7 @@ export default function App() {
     });
   };
 
-  const fetchClaims = async (retries = 3) => {
+  const fetchClaims = async (retries = 10) => {
     try {
       const response = await fetch('/api/claims');
       const contentType = response.headers.get('content-type');
@@ -1664,7 +1664,7 @@ export default function App() {
         if (contentType && contentType.includes('text/html')) {
           if (retries > 0) {
             console.log(`Server initializing, retrying fetchClaims... (${retries} left)`);
-            setTimeout(() => fetchClaims(retries - 1), 2000);
+            setTimeout(() => fetchClaims(retries - 1), 3000);
             return;
           }
           throw new Error(`השרת עדיין בתהליך אתחול או שאינו זמין (סטטוס: ${response.status}). אנא נסה שוב בעוד מספר שניות.`);
@@ -1681,7 +1681,7 @@ export default function App() {
       if (contentType && !contentType.includes('application/json')) {
         if (retries > 0) {
           console.log(`Server returned HTML instead of JSON, retrying fetchClaims... (${retries} left)`);
-          setTimeout(() => fetchClaims(retries - 1), 2000);
+          setTimeout(() => fetchClaims(retries - 1), 3000);
           return;
         }
         throw new Error(`השרת החזיר תגובה שאינה JSON (סוג: ${contentType}). ייתכן שהשרת בתהליך אתחול.`);
@@ -1691,11 +1691,14 @@ export default function App() {
       setClaims(data);
     } catch (error: any) {
       console.error('Error fetching claims:', error);
-      showToast(error.message || 'שגיאה בטעינת תביעות', 'error');
+      // Only show toast if it's the last retry or a real error
+      if (retries === 0 || !error.message.includes('תהליך אתחול')) {
+        showToast(error.message || 'שגיאה בטעינת תביעות', 'error');
+      }
     }
   };
 
-  const fetchUsers = async (retries = 3) => {
+  const fetchUsers = async (retries = 10) => {
     try {
       const response = await fetch('/api/users');
       const contentType = response.headers.get('content-type');
@@ -1703,7 +1706,7 @@ export default function App() {
         if (contentType && contentType.includes('text/html')) {
           if (retries > 0) {
             console.log(`Server initializing, retrying fetchUsers... (${retries} left)`);
-            setTimeout(() => fetchUsers(retries - 1), 2000);
+            setTimeout(() => fetchUsers(retries - 1), 3000);
             return;
           }
           throw new Error('השרת בתהליך אתחול...');
@@ -1713,7 +1716,7 @@ export default function App() {
       if (contentType && !contentType.includes('application/json')) {
         if (retries > 0) {
           console.log(`Server returned HTML instead of JSON, retrying fetchUsers... (${retries} left)`);
-          setTimeout(() => fetchUsers(retries - 1), 2000);
+          setTimeout(() => fetchUsers(retries - 1), 3000);
           return;
         }
         throw new Error('תגובה לא תקינה מהשרת');
@@ -1725,15 +1728,27 @@ export default function App() {
     }
   };
 
-  const fetchAgents = async () => {
+  const fetchAgents = async (retries = 10) => {
     try {
       const response = await fetch('/api/agents');
       const contentType = response.headers.get('content-type');
       if (!response.ok) {
-        if (contentType && contentType.includes('text/html')) throw new Error('השרת בתהליך אתחol...');
+        if (contentType && contentType.includes('text/html')) {
+          if (retries > 0) {
+            setTimeout(() => fetchAgents(retries - 1), 3000);
+            return;
+          }
+          throw new Error('השרת בתהליך אתחול...');
+        }
         throw new Error(`Server error: ${response.status}`);
       }
-      if (contentType && !contentType.includes('application/json')) throw new Error('תגובה לא תקינה מהשרת');
+      if (contentType && !contentType.includes('application/json')) {
+        if (retries > 0) {
+          setTimeout(() => fetchAgents(retries - 1), 3000);
+          return;
+        }
+        throw new Error('תגובה לא תקינה מהשרת');
+      }
       const data = await response.json();
       setAgents(data);
     } catch (error) {
@@ -1842,15 +1857,27 @@ ${statusLink}
     return diffDays <= 30;
   });
 
-  const fetchEntities = async () => {
+  const fetchEntities = async (retries = 10) => {
     try {
       const response = await fetch('/api/entities');
       const contentType = response.headers.get('content-type');
       if (!response.ok) {
-        if (contentType && contentType.includes('text/html')) throw new Error('השרת בתהליך אתחול...');
+        if (contentType && contentType.includes('text/html')) {
+          if (retries > 0) {
+            setTimeout(() => fetchEntities(retries - 1), 3000);
+            return;
+          }
+          throw new Error('השרת בתהליך אתחול...');
+        }
         throw new Error(`Server error: ${response.status}`);
       }
-      if (contentType && !contentType.includes('application/json')) throw new Error('תגובה לא תקינה מהשרת');
+      if (contentType && !contentType.includes('application/json')) {
+        if (retries > 0) {
+          setTimeout(() => fetchEntities(retries - 1), 3000);
+          return;
+        }
+        throw new Error('תגובה לא תקינה מהשרת');
+      }
       const data = await response.json();
       setEntities(data);
     } catch (error) {
@@ -1858,15 +1885,27 @@ ${statusLink}
     }
   };
 
-  const fetchClaimHandlers = async () => {
+  const fetchClaimHandlers = async (retries = 10) => {
     try {
       const response = await fetch('/api/claim-handlers');
       const contentType = response.headers.get('content-type');
       if (!response.ok) {
-        if (contentType && contentType.includes('text/html')) throw new Error('השרת בתהליך אתחול...');
+        if (contentType && contentType.includes('text/html')) {
+          if (retries > 0) {
+            setTimeout(() => fetchClaimHandlers(retries - 1), 3000);
+            return;
+          }
+          throw new Error('השרת בתהליך אתחול...');
+        }
         throw new Error(`Server error: ${response.status}`);
       }
-      if (contentType && !contentType.includes('application/json')) throw new Error('תגובה לא תקינה מהשרת');
+      if (contentType && !contentType.includes('application/json')) {
+        if (retries > 0) {
+          setTimeout(() => fetchClaimHandlers(retries - 1), 3000);
+          return;
+        }
+        throw new Error('תגובה לא תקינה מהשרת');
+      }
       const data = await response.json();
       setClaimHandlers(data);
     } catch (error) {

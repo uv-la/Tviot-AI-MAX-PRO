@@ -1424,24 +1424,35 @@ async function startServer() {
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
+    console.log("Initializing Vite middleware in background...");
+    createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
+    }).then(vite => {
+      app.use(vite.middlewares);
+      console.log("Vite middleware initialized and attached.");
+    }).catch(err => {
+      console.error("Failed to initialize Vite middleware:", err);
     });
-    app.use(vite.middlewares);
   } else {
-    app.use(express.static(path.join(__dirname, "dist")));
-    app.get("*", (req, res) => {
-      if (req.originalUrl.startsWith("/api")) {
-        console.warn(`[SPA Fallback] API request hit SPA fallback: ${req.originalUrl}`);
-        return res.status(404).json({ error: `API route not found: ${req.method} ${req.originalUrl}` });
-      }
-      res.sendFile(path.join(__dirname, "dist", "index.html"));
-    });
+    const distPath = path.join(__dirname, "dist");
+    if (fs.existsSync(distPath)) {
+      app.use(express.static(distPath));
+      app.get("*", (req, res) => {
+        if (req.originalUrl.startsWith("/api")) {
+          console.warn(`[SPA Fallback] API request hit SPA fallback: ${req.originalUrl}`);
+          return res.status(404).json({ error: `API route not found: ${req.method} ${req.originalUrl}` });
+        }
+        res.sendFile(path.join(distPath, "index.html"));
+      });
+    } else {
+      console.warn("Production build (dist) not found. API routes will still work.");
+    }
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Server listening on port ${PORT}`);
+    console.log(`API routes are ready.`);
   });
 }
 
